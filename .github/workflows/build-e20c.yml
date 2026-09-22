@@ -24,7 +24,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install build requirements
-        run: sudo ./compile.sh requirements
+        run: |
+          sudo ./compile.sh requirements
+          sudo chown -R "$(id -u):$(id -g)" .
 
       - name: Build E20C image
         run: |
