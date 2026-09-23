@@ -1,0 +1,54 @@
+#!/bin/sh
+set -eu
+
+fail() { echo "AIBox MySQL bootstrap: $*" >&2; exit 1; }
+MYSQL="${AIBOX_MYSQL_CLIENT:-/usr/local/mysql/bin/mysql}"
+MYSQLADMIN="${AIBOX_MYSQL_ADMIN:-/usr/local/mysql/bin/mysqladmin}"
+SOCKET="${AIBOX_MYSQL_SOCKET:-/run/mysqld/mysqld.sock}"
+SECURE_DIR="${AIBOX_MYSQL_SECURE_DIR:-/userdata/aibox/secure}"
+RUNTIME_ENV="$SECURE_DIR/mysql-runtime.env"
+
+command -v "$MYSQL" >/dev/null 2>&1 || fail 'mysql client is missing'
+command -v "$MYSQLADMIN" >/dev/null 2>&1 || fail 'mysqladmin is missing'
+mkdir -p "$SECURE_DIR"
+chmod 0700 "$SECURE_DIR"
+umask 077
+
+if [ -f "$RUNTIME_ENV" ]; then
+    . "$RUNTIME_ENV"
+fi
+MYSQL_APP_PASSWORD="${MYSQL_APP_PASSWORD:-}"
+case "$MYSQL_APP_PASSWORD" in
+    '') MYSQL_APP_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" ;;
+    *[!0-9A-Fa-f]*) fail 'application password must be hexadecimal' ;;
+esac
+[ "${#MYSQL_APP_PASSWORD}" = 64 ] || fail 'application password must be 64 hex characters'
+cat > "$RUNTIME_ENV.tmp.$$" <<EOF
+MYSQL_APP_DATABASE=aibox
+MYSQL_APP_USER=aibox
+MYSQL_APP_PASSWORD=$MYSQL_APP_PASSWORD
+EOF
+chmod 0600 "$RUNTIME_ENV.tmp.$$"
+mv -f "$RUNTIME_ENV.tmp.$$" "$RUNTIME_ENV"
+
+i=0
+until "$MYSQL" --protocol=socket --socket="$SOCKET" -uroot -e 'SELECT 1' >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ "$i" -le 120 ] || fail 'MySQL did not become ready'
+    sleep 1
+done
+
+"$MYSQL" --protocol=socket --socket="$SOCKET" -uroot <<SQL
+ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;
+CREATE DATABASE IF NOT EXISTS \`aibox\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+CREATE USER IF NOT EXISTS 'aibox'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
+ALTER USER 'aibox'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
+CREATE USER IF NOT EXISTS 'aibox'@'127.0.0.1' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
+ALTER USER 'aibox'@'127.0.0.1' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
+GRANT ALL PRIVILEGES ON \`aibox\`.* TO 'aibox'@'localhost';
+GRANT ALL PRIVILEGES ON \`aibox\`.* TO 'aibox'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+
+"$MYSQLADMIN" --protocol=socket --socket="$SOCKET" -uroot ping >/dev/null
+echo 'AIBox MySQL bootstrap: local database and account are ready.'

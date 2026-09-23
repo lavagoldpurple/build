@@ -1,0 +1,21 @@
+[Unit]
+Description=MySQL 8.0.37 database server
+Requires=aibox-storage-init.service aibox-mysql-install.service
+After=local-fs.target aibox-storage-init.service aibox-mysql-install.service
+Before=aibox-mysql-bootstrap.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/install -d -o mysql -g mysql -m 0755 /run/mysqld
+ExecStart=/usr/local/mysql/bin/mysqld --defaults-file=/etc/mysql/my.cnf --user=mysql
+ExecStop=/usr/local/mysql/bin/mysqladmin --socket=/run/mysqld/mysqld.sock -uroot shutdown
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=120
+LimitNOFILE=1048576
+RuntimeDirectory=mysqld
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

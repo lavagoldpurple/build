@@ -1,0 +1,12 @@
+[Unit]
+Description=Install AIBox application bundle
+Requires=aibox-storage-init.service aibox-media-ready.service aibox-mysql-bootstrap.service
+After=aibox-storage-init.service aibox-media-ready.service aibox-mysql-bootstrap.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/aibox-app-init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

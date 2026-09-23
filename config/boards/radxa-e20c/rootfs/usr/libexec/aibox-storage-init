@@ -4,9 +4,16 @@ set -eu
 fail() { echo "AIBox storage: $*" >&2; exit 1; }
 require_command() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
-for command_name in blkid blockdev chown findmnt growpart install lsblk partprobe readlink resize2fs; do
+for command_name in addgroup adduser blkid blockdev chown find getent findmnt growpart id install lsblk partprobe readlink resize2fs; do
     require_command "$command_name"
 done
+
+if ! getent group mysql >/dev/null 2>&1; then
+    addgroup --system mysql >/dev/null
+fi
+if ! id mysql >/dev/null 2>&1; then
+    adduser --system --ingroup mysql --home /nonexistent --no-create-home --shell /usr/sbin/nologin mysql >/dev/null
+fi
 
 root_source="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
 program_source="$(findmnt -n -o SOURCE /opt/aibox 2>/dev/null || true)"
@@ -69,6 +76,7 @@ install -d -o mysql -g mysql -m 0750 /userdata/aibox/logs/mysql
 install -d -m 0755 /userdata/aibox/logs/api /userdata/aibox/logs/nvr /userdata/aibox/logs/startup
 install -d -m 0755 /userdata/aibox/ota
 install -d -m 0755 /userdata/aibox/ota/packages /userdata/aibox/ota/staging /userdata/aibox/ota/tasks
+install -d -m 0700 /userdata/aibox/network
 install -d -m 0755 /userdata/aibox/backups
 install -d -m 0755 /userdata/aibox/backups/config /userdata/aibox/backups/database
 install -d -m 0755 /opt/aibox/app/releases /opt/aibox/nvr/releases /opt/aibox/defaults /opt/aibox/scripts

@@ -1,0 +1,98 @@
+#!/bin/sh
+set -eu
+
+fail() { echo "AIBox MySQL install: $*" >&2; exit 1; }
+require_command() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
+
+for command_name in blkid chown find findmnt getent id install ln mkdir mv readlink rm sha256sum tar; do
+    require_command "$command_name"
+done
+require_command addgroup
+require_command adduser
+
+MYSQL_VERSION=8.0.37
+MYSQL_HOME=/usr/local/mysql
+MYSQL_VERSION_HOME=/usr/local/mysql-${MYSQL_VERSION}
+DATA_DIR=/userdata/aibox/database/mysql
+MARKER=/userdata/.aibox-mysql-${MYSQL_VERSION}-initialized
+FACTORY_ROOT=/opt/aibox/factory
+
+[ "$(findmnt -n -o FSTYPE /opt/aibox 2>/dev/null || true)" = ext4 ] || fail '/opt/aibox is not ext4'
+[ "$(findmnt -n -o FSTYPE /userdata 2>/dev/null || true)" = ext4 ] || fail '/userdata is not ext4'
+[ "$(findmnt -n -o FSTYPE /mnt/aibox-media 2>/dev/null || true)" = ext4 ] || fail '/mnt/aibox-media is not mounted as ext4'
+media_source="$(readlink -f "$(findmnt -n -o SOURCE /mnt/aibox-media 2>/dev/null || true)" 2>/dev/null || true)"
+[ -n "$media_source" ] || fail 'media device is not mounted'
+[ "$(blkid -s LABEL -o value "$media_source" 2>/dev/null || true)" = AIBOX_MEDIA ] || fail 'media label is not AIBOX_MEDIA'
+
+package_dir="$(find "$FACTORY_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'aibox-*' -print -quit 2>/dev/null || true)"
+[ -n "$package_dir" ] || fail 'embedded AIBox package is missing'
+MYSQL_PACKAGES="$package_dir/mysql/packages"
+[ -d "$MYSQL_PACKAGES" ] || fail 'embedded MySQL payload is missing'
+(cd "$MYSQL_PACKAGES" && sha256sum -c SHA256SUMS >/dev/null) || fail 'MySQL payload checksum verification failed'
+
+MYSQL_TAR="$MYSQL_PACKAGES/mysql-${MYSQL_VERSION}-linux-glibc2.17-aarch64.tar.xz"
+MYSQL_EXTRA="$MYSQL_PACKAGES/aibox-mysql-extra.tar.gz"
+[ -f "$MYSQL_TAR" ] || fail 'MySQL 8.0.37 archive is missing'
+[ -f "$MYSQL_EXTRA" ] || fail 'MySQL runtime compatibility archive is missing'
+
+if ! getent group mysql >/dev/null 2>&1; then
+    addgroup --system mysql >/dev/null
+fi
+if ! id mysql >/dev/null 2>&1; then
+    adduser --system --ingroup mysql --home /nonexistent --no-create-home --shell /usr/sbin/nologin mysql >/dev/null
+fi
+
+# This cleanup is intentional and happens once per new MySQL firmware. The
+# marker is outside /userdata/aibox, so later boots cannot repeat it.
+if [ ! -f "$MARKER" ]; then
+    rm -rf -- /userdata/aibox
+    install -d -m 0755 /userdata/aibox
+fi
+
+install -d -m 0755 /userdata/aibox/config /userdata/aibox/database /userdata/aibox/database/nvr
+install -d -m 0755 /userdata/aibox/license /userdata/aibox/logs /userdata/aibox/logs/api
+install -d -m 0755 /userdata/aibox/logs/nvr /userdata/aibox/logs/startup
+install -d -m 0755 /userdata/aibox/ota /userdata/aibox/backups /userdata/aibox/network
+install -d -o mysql -g mysql -m 0750 "$DATA_DIR" /userdata/aibox/logs/mysql
+
+if [ ! -x "$MYSQL_VERSION_HOME/bin/mysqld" ]; then
+    extract_dir="/usr/local/.mysql-extract.$$"
+    rm -rf -- "$extract_dir"
+    install -d -m 0755 "$extract_dir"
+    tar -xJf "$MYSQL_TAR" -C "$extract_dir"
+    extracted="$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d -name 'mysql-8.0.37-*' -print -quit)"
+    [ -n "$extracted" ] || fail 'MySQL archive has an unexpected layout'
+    rm -rf -- "$MYSQL_VERSION_HOME"
+    mv "$extracted" "$MYSQL_VERSION_HOME"
+    rm -rf -- "$extract_dir"
+
+    install -d -m 0755 "$MYSQL_VERSION_HOME/private-lib"
+    extra_dir="/usr/local/.mysql-extra.$$"
+    rm -rf -- "$extra_dir"
+    install -d -m 0755 "$extra_dir"
+    tar -xzf "$MYSQL_EXTRA" -C "$extra_dir"
+    extra_root="$(find "$extra_dir" -mindepth 1 -maxdepth 1 -type d -name mysql-extra -print -quit)"
+    [ -n "$extra_root" ] || fail 'MySQL compatibility archive has an unexpected layout'
+    cp -a "$extra_root/lib/." "$MYSQL_VERSION_HOME/private-lib/"
+    rm -rf -- "$extra_dir"
+fi
+
+[ -x "$MYSQL_VERSION_HOME/bin/mysqld" ] || fail 'MySQL mysqld binary is missing'
+ln -sfn "$MYSQL_VERSION_HOME" "$MYSQL_HOME"
+install -d -o mysql -g mysql -m 0750 "$DATA_DIR"
+install -d -m 0755 /run/mysqld
+chown mysql:mysql /run/mysqld
+chown -R mysql:mysql "$DATA_DIR"
+
+if [ ! -d "$DATA_DIR/mysql" ]; then
+    if find "$DATA_DIR" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+        fail "MySQL data directory is non-empty but uninitialized: $DATA_DIR"
+    fi
+    "$MYSQL_HOME/bin/mysqld" --defaults-file=/etc/mysql/my.cnf --initialize-insecure --user=mysql
+fi
+
+if [ ! -f "$MARKER" ]; then
+    : > "$MARKER"
+    chmod 0644 "$MARKER"
+fi
+echo "AIBox MySQL: MySQL ${MYSQL_VERSION} is installed and initialized."

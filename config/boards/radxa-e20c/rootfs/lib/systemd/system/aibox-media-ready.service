@@ -7,3 +7,6 @@ After=mnt-aibox\x2dmedia.mount
 Type=oneshot
 ExecStart=/usr/libexec/aibox-media-ready
 RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 [Unit]
 Description=Prepare AIBox persistent storage
 After=local-fs.target
-Before=aibox-mariadb-init.service mariadb.service
+Before=aibox-mysql-install.service mysql.service
 
 [Service]
 Type=oneshot

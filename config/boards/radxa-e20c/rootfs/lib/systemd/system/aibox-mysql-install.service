@@ -1,0 +1,13 @@
+[Unit]
+Description=Install and initialize MySQL 8.0.37 for AIBox
+Requires=aibox-storage-init.service aibox-media-ready.service
+After=aibox-storage-init.service aibox-media-ready.service
+Before=mysql.service aibox-mysql-bootstrap.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/aibox-mysql-install
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

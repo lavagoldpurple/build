@@ -1,0 +1,12 @@
+[Unit]
+Description=Create the AIBox MySQL database and local account
+Requires=aibox-mysql-install.service mysql.service
+After=aibox-mysql-install.service mysql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/aibox-mysql-bootstrap
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,78 @@
+#!/bin/sh
+set -eu
+
+fail() { echo "AIBox application: $*" >&2; exit 1; }
+require_command() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
+require_command find
+require_command findmnt
+require_command install
+require_command openssl
+
+FACTORY_ROOT=/opt/aibox/factory
+SECURE_DIR=/userdata/aibox/secure
+RUNTIME_ENV="$SECURE_DIR/aibox-runtime.env"
+MYSQL_ENV="$SECURE_DIR/mysql-runtime.env"
+
+[ -d /opt/aibox ] || fail '/opt/aibox is not mounted'
+[ "$(findmnt -n -o FSTYPE /opt/aibox 2>/dev/null || true)" = ext4 ] || fail '/opt/aibox is not ext4'
+[ "$(findmnt -n -o FSTYPE /userdata 2>/dev/null || true)" = ext4 ] || fail '/userdata is not ext4'
+[ "$(findmnt -n -o FSTYPE /mnt/aibox-media 2>/dev/null || true)" = ext4 ] || fail '/mnt/aibox-media is not mounted as ext4'
+[ -f /userdata/aibox/.app-installed ] && exit 0
+[ -f "$MYSQL_ENV" ] || fail 'MySQL runtime credentials are missing'
+# shellcheck disable=SC1090
+. "$MYSQL_ENV"
+[ -n "${MYSQL_APP_PASSWORD:-}" ] || fail 'MySQL application password is empty'
+
+package_dir="$(find "$FACTORY_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'aibox-*' -print -quit 2>/dev/null || true)"
+[ -n "$package_dir" ] || fail 'no embedded AIBox package was found'
+[ -x "$package_dir/scripts/install.sh" ] || fail 'embedded AIBox package installer is missing'
+
+if [ -f "$RUNTIME_ENV" ]; then
+    # shellcheck disable=SC1090
+    . "$RUNTIME_ENV"
+else
+    install -d -m 0700 "$SECURE_DIR"
+    AIBOX_JWT_SECRET="$(openssl rand -hex 32)"
+    AIBOX_DEVICE_CREDENTIAL_KEY="$(openssl rand -hex 32)"
+    umask 077
+    cat > "$RUNTIME_ENV" <<EOF
+AIBOX_JWT_SECRET=$AIBOX_JWT_SECRET
+AIBOX_DEVICE_CREDENTIAL_KEY=$AIBOX_DEVICE_CREDENTIAL_KEY
+EOF
+    chmod 0600 "$RUNTIME_ENV"
+fi
+
+MYSQL_DSN="aibox:${MYSQL_APP_PASSWORD}@tcp(127.0.0.1:3306)/aibox?parseTime=true&loc=Local&charset=utf8mb4,utf8"
+AIBOX_HOME=/opt/aibox \
+AIBOX_STORAGE_MOUNT=/userdata \
+AIBOX_MEDIA_ROOT=/mnt/aibox-media/aibox/media \
+AIBOX_OTA_ROOT=/userdata/aibox/ota \
+AIBOX_NETWORK_ROOT=/userdata/aibox/network \
+AIBOX_LOG_PATH=/userdata/aibox/logs/api/aibox-api.log \
+AIBOX_MYSQL_DSN="$MYSQL_DSN" \
+AIBOX_MYSQL_SERVICE=mysql.service \
+AIBOX_MYSQL_DATA_DIR=/userdata/aibox/database/mysql \
+AIBOX_JWT_SECRET="$AIBOX_JWT_SECRET" \
+AIBOX_DEVICE_CREDENTIAL_KEY="$AIBOX_DEVICE_CREDENTIAL_KEY" \
+AIBOX_INSTALL_SYSTEMD=1 \
+AIBOX_INSTALL_INITD=0 \
+NVR_ROOT=/opt/aibox/nvr \
+NVR_MEDIA_ROOT=/mnt/aibox-media/aibox/nvr \
+NVR_STORAGE_MOUNT=/mnt/aibox-media \
+NVR_INSTALL_SYSTEMD=1 \
+NVR_INSTALL_INITD=0 \
+sh "$package_dir/scripts/install.sh"
+
+mkdir -p /etc/systemd/system/nvr-api.service.d
+cat > /etc/systemd/system/nvr-api.service.d/10-aibox-media.conf <<'EOF'
+[Unit]
+Requires=aibox-media-ready.service
+After=aibox-media-ready.service
+EOF
+systemctl daemon-reload
+systemctl enable aibox-api.service aibox-network.service aibox-ota.service nvr-api.service
+systemctl restart aibox-api.service nvr-api.service
+install -d -m 0755 /userdata/aibox
+touch /userdata/aibox/.app-installed
+chmod 0600 /userdata/aibox/.app-installed
+echo 'AIBox application bundle installed.'
