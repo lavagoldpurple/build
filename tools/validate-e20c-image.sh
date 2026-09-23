@@ -69,10 +69,12 @@ grep -Fq 'log-error=/userdata/aibox/logs/mysql/error.log' "$root_mount/etc/mysql
 [[ -f "$root_mount/lib/systemd/system/aibox-mysql-install.service" ]] || { echo 'MySQL install service missing' >&2; exit 1; }
 [[ -f "$root_mount/lib/systemd/system/aibox-mysql-bootstrap.service" ]] || { echo 'MySQL bootstrap service missing' >&2; exit 1; }
 [[ -f "$root_mount/lib/systemd/system/mysql.service" ]] || { echo 'MySQL service missing' >&2; exit 1; }
-mysql_payload="$(find "$program_mount/opt/aibox/factory" -type f -name 'mysql-8.0.37-linux-glibc2.17-aarch64.tar.xz' -print -quit)"
-mysql_extra="$(find "$program_mount/opt/aibox/factory" -type f -name 'aibox-mysql-extra.tar.gz' -print -quit)"
-libaio_payload="$(find "$program_mount/opt/aibox/factory" -type f -name 'libaio1_*_arm64.deb' -print -quit)"
-manifest="$(find "$program_mount/opt/aibox/factory" -maxdepth 2 -type f -name manifest.json -print -quit)"
+factory="$program_mount/factory"
+[[ -d "$factory" ]] || { echo "AIBox factory package missing from program partition: $factory" >&2; exit 1; }
+mysql_payload="$(find "$factory" -type f -name 'mysql-8.0.37-linux-glibc2.17-aarch64.tar.xz' -print -quit)"
+mysql_extra="$(find "$factory" -type f -name 'aibox-mysql-extra.tar.gz' -print -quit)"
+libaio_payload="$(find "$factory" -type f -name 'libaio1_*_arm64.deb' -print -quit)"
+manifest="$(find "$factory" -maxdepth 2 -type f -name manifest.json -print -quit)"
 [[ -n "$mysql_payload" ]] || { echo 'MySQL 8.0.37 payload missing from program partition' >&2; exit 1; }
 [[ -n "$mysql_extra" ]] || { echo 'MySQL compatibility payload missing from program partition' >&2; exit 1; }
 [[ -n "$libaio_payload" ]] || { echo 'ARM64 libaio payload missing from program partition' >&2; exit 1; }
