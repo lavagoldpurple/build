@@ -57,7 +57,7 @@ jobs:
         run: |
           shopt -s nullglob
           for image in output/images/*.img; do
-            xz -T0 -1 -k "$image"
+            xz -T0 -1 -c "$image" > "$image.xz"
             sha256sum -b "$image.xz" | awk '{split($2, a, "/"); print $1, a[length(a)]}' > "$image.xz.sha"
             rm -f "$image" "$image.sha"
           done
