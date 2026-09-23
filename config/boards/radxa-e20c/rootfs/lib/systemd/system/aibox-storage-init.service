@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare AIBox persistent storage
+After=local-fs.target
+Before=aibox-mariadb-init.service mariadb.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/aibox-storage-init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

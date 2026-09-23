@@ -1,0 +1,82 @@
+#!/bin/sh
+set -eu
+
+fail() { echo "AIBox storage: $*" >&2; exit 1; }
+require_command() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
+
+for command_name in blkid blockdev chown findmnt growpart install lsblk partprobe readlink resize2fs; do
+    require_command "$command_name"
+done
+
+root_source="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+program_source="$(findmnt -n -o SOURCE /opt/aibox 2>/dev/null || true)"
+data_source="$(findmnt -n -o SOURCE /userdata 2>/dev/null || true)"
+[ -n "$root_source" ] || fail 'root filesystem is not mounted'
+[ -n "$program_source" ] || fail '/opt/aibox is not mounted'
+[ -n "$data_source" ] || fail '/userdata is not mounted'
+
+root_source="$(readlink -f "$root_source")"
+program_source="$(readlink -f "$program_source")"
+data_source="$(readlink -f "$data_source")"
+case "$root_source" in
+    /dev/mmcblk[0-9]*p1) disk="${root_source%p1}" ;;
+    *) fail "unexpected root device: $root_source" ;;
+esac
+[ "$program_source" = "${disk}p2" ] || fail "unexpected program device: $program_source"
+[ "$data_source" = "${disk}p3" ] || fail "unexpected data device: $data_source"
+
+disk_name="${disk##*/}"
+[ "$(cat "/sys/class/block/$disk_name/device/type" 2>/dev/null || true)" = MMC ] ||
+    fail "root disk is not eMMC: $disk"
+
+disk_bytes="$(blockdev --getsize64 "$disk")"
+case "$disk_bytes" in ''|*[!0-9]*) fail "invalid eMMC size: $disk_bytes" ;; esac
+[ "$disk_bytes" -ge 15500000000 ] || fail 'E20C requires a nominal 16GB eMMC'
+
+check_partition() {
+    device="$1"
+    expected_label="$2"
+    target="$3"
+    [ "$(findmnt -n -o FSTYPE "$target" 2>/dev/null || true)" = ext4 ] || fail "$target is not mounted as ext4"
+    [ "$(blkid -s LABEL -o value "$device" 2>/dev/null || true)" = "$expected_label" ] ||
+        fail "unexpected filesystem label on $device"
+}
+
+check_partition "$program_source" AIBOX_PROGRAM /opt/aibox
+check_partition "$data_source" AIBOX_DATA /userdata
+
+# growpart returns a non-zero status for an already-maximized partition.
+growpart_output=""
+if ! growpart_output="$(growpart "$disk" 3 2>&1)"; then
+    printf '%s\n' "$growpart_output" | grep -Eq 'NOCHANGE|NO[[:space:]]+CHANGE' || {
+        printf '%s\n' "$growpart_output" >&2
+        fail 'unable to grow the data partition'
+    }
+fi
+printf '%s\n' "$growpart_output"
+partprobe "$disk" 2>/dev/null || true
+resize2fs "$data_source" >/dev/null
+
+install -d -m 0755 /opt/aibox
+install -d -m 0755 /userdata/aibox
+install -d -m 0755 /userdata/aibox/config
+install -d -m 0755 /userdata/aibox/database
+install -d -m 0755 /userdata/aibox/database/nvr
+install -d -o mysql -g mysql -m 0750 /userdata/aibox/database/mysql
+install -d -m 0755 /userdata/aibox/license
+install -d -m 0755 /userdata/aibox/logs
+install -d -o mysql -g mysql -m 0750 /userdata/aibox/logs/mysql
+install -d -m 0755 /userdata/aibox/logs/api /userdata/aibox/logs/nvr /userdata/aibox/logs/startup
+install -d -m 0755 /userdata/aibox/ota
+install -d -m 0755 /userdata/aibox/ota/packages /userdata/aibox/ota/staging /userdata/aibox/ota/tasks
+install -d -m 0755 /userdata/aibox/backups
+install -d -m 0755 /userdata/aibox/backups/config /userdata/aibox/backups/database
+install -d -m 0755 /opt/aibox/app/releases /opt/aibox/nvr/releases /opt/aibox/defaults /opt/aibox/scripts
+install -d -m 0755 /run/aibox
+
+install -d -m 0555 /mnt/aibox-media
+chown root:root /opt/aibox /userdata /userdata/aibox /mnt/aibox-media
+chmod 0755 /opt/aibox /userdata /userdata/aibox
+chmod 0555 /mnt/aibox-media
+
+echo 'AIBox storage: program, data and runtime directories are ready.'

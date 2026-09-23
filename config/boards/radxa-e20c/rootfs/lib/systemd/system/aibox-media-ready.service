@@ -1,0 +1,9 @@
+[Unit]
+Description=Verify the AIBox media TF card
+RequiresMountsFor=/mnt/aibox-media
+After=mnt-aibox\x2dmedia.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/aibox-media-ready
+RemainAfterExit=yes

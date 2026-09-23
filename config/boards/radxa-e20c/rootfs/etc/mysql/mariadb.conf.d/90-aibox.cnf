@@ -1,0 +1,15 @@
+[mysqld]
+datadir=/userdata/aibox/database/mysql
+bind-address=127.0.0.1
+port=3306
+socket=/run/mysqld/mysqld.sock
+pid-file=/run/mysqld/mysqld.pid
+log_error=/userdata/aibox/logs/mysql/error.log
+character-set-server=utf8mb4
+collation-server=utf8mb4_general_ci
+skip-name-resolve
+skip-log-bin
+
+[client]
+socket=/run/mysqld/mysqld.sock
+port=3306

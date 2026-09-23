@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+fail() { echo "AIBox media: $*" >&2; exit 1; }
+source="$(findmnt -n -o SOURCE /mnt/aibox-media 2>/dev/null || true)"
+[ -n "$source" ] || fail 'AIBOX_MEDIA is not mounted'
+source="$(readlink -f "$source")"
+[ "$(findmnt -n -o FSTYPE /mnt/aibox-media 2>/dev/null || true)" = ext4 ] || fail 'media filesystem is not ext4'
+[ "$(blkid -s LABEL -o value "$source" 2>/dev/null || true)" = AIBOX_MEDIA ] || fail 'media label is not AIBOX_MEDIA'
+parent="$(lsblk -n -o PKNAME "$source" 2>/dev/null | awk 'NF { print $1; exit }')"
+[ -n "$parent" ] || fail 'media parent device is unknown'
+[ "$(cat "/sys/class/block/$parent/device/type" 2>/dev/null || true)" = SD ] || fail 'media device is not a TF/SD card'
+echo "AIBox media: verified $source on SD card."

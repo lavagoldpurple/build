@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+
+fail() { echo "AIBox MariaDB init: $*" >&2; exit 1; }
+data_dir=/userdata/aibox/database/mysql
+
+command -v mariadb-install-db >/dev/null 2>&1 || fail 'mariadb-install-db is missing'
+id mysql >/dev/null 2>&1 || fail 'mysql user is missing'
+[ -d "$data_dir" ] || fail "data directory is missing: $data_dir"
+
+if [ -d "$data_dir/mysql" ]; then
+    chown -R mysql:mysql "$data_dir"
+    chmod 0750 "$data_dir"
+    echo 'AIBox MariaDB init: existing data directory retained.'
+    exit 0
+fi
+
+if find "$data_dir" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+    fail "data directory is non-empty but not initialized: $data_dir"
+fi
+
+install -d -o mysql -g mysql -m 0750 "$data_dir"
+mariadb-install-db \
+    --user=mysql \
+    --datadir="$data_dir" \
+    --skip-test-db \
+    --auth-root-authentication-method=socket
+chown -R mysql:mysql "$data_dir"
+chmod 0750 "$data_dir"
+echo 'AIBox MariaDB init: initialized data directory.'

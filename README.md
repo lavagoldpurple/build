@@ -39,6 +39,31 @@ cd build
 - Superuser privileges (`sudo` or root)
 - Up-to-date system (outdated Docker or other tools can cause failures)
 
+## Radxa E20C image layout
+
+This checkout is dedicated to the Radxa E20C and builds Ubuntu Noble minimal
+images with the vendor RK3528 kernel. The image targets a nominal 16GB eMMC:
+the first 16 MiB are reserved for the Rockchip bootloader, followed by a 4 GiB
+system partition, a 4 GiB `AIBOX_PROGRAM` partition mounted at `/opt/aibox`,
+and an `AIBOX_DATA` partition mounted at `/userdata`.
+
+The data partition is expanded to the end of the physical eMMC on first boot.
+MariaDB is installed from the Noble archive and runs as the native
+`mariadb.service`; its binaries remain under `/usr`. Database files and logs
+are stored below `/userdata/aibox`, and the first boot creates the local-only
+`aibox` database and account. Credentials are generated on-device in
+`/userdata/aibox/secure/mariadb-runtime.env` with mode `0600`.
+
+The optional media mount is `/mnt/aibox-media`. It accepts only a preformatted
+ext4 TF card labeled `AIBOX_MEDIA`; the image never formats or selects a card
+by `/dev/mmcblkN`. Services that write media must require
+`aibox-media-ready.service`, otherwise a missing card must not fall back to the
+root filesystem.
+
+The `/opt/aibox` partition is reserved for future application packages. A full
+raw image rewrite is not a data-preserving upgrade; application OTA is the
+planned path for retaining `/userdata` and media.
+
 ## Resources
 
 - **[Documentation](https://docs.armbian.com/Developer-Guide_Overview/)** — Comprehensive guides for building, configuring, and customizing

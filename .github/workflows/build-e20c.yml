@@ -26,7 +26,11 @@ jobs:
       - name: Install build requirements
         run: |
           sudo ./compile.sh requirements
-          sudo chown -R "$(id -u):$(id -g)" .
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          sudo chmod -R u+rwX "$GITHUB_WORKSPACE"
+
+      - name: Validate E20C runtime contracts
+        run: bash tools/test-e20c-runtime.sh
 
       - name: Build E20C image
         run: |
@@ -40,6 +44,12 @@ jobs:
             COMPRESS_OUTPUTIMAGE=sha,img,xz \
             SHARE_LOG=yes \
             EXPERT=yes
+
+      - name: Validate E20C image layout
+        run: |
+          image="$(find output/images -maxdepth 1 -type f -name '*.img' -print -quit)"
+          test -n "$image"
+          sudo bash tools/validate-e20c-image.sh "$image"
 
       - name: Upload E20C firmware
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
