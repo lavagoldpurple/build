@@ -42,14 +42,25 @@ jobs:
             BUILD_DESKTOP=no \
             KERNEL_CONFIGURE=no \
             COMPRESS_OUTPUTIMAGE=sha,img,xz \
+            SKIP_COMPRESSING=img \
             SHARE_LOG=yes \
             EXPERT=yes
 
       - name: Validate E20C image layout
         run: |
+          find output/images -maxdepth 1 -type f -printf '%f\n' | sort
           image="$(find output/images -maxdepth 1 -type f -name '*.img' -print -quit)"
-          test -n "$image"
+          test -n "$image" || { echo 'raw E20C image was not produced' >&2; exit 1; }
           sudo bash tools/validate-e20c-image.sh "$image"
+
+      - name: Compress E20C raw image
+        run: |
+          shopt -s nullglob
+          for image in output/images/*.img; do
+            xz -T0 -1 -k "$image"
+            sha256sum -b "$image.xz" | awk '{split($2, a, "/"); print $1, a[length(a)]}' > "$image.xz.sha"
+            rm -f "$image" "$image.sha"
+          done
 
       - name: Upload E20C firmware
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
