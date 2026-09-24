@@ -74,10 +74,12 @@ factory="$program_mount/factory"
 mysql_payload="$(find "$factory" -type f -name 'mysql-8.0.37-linux-glibc2.17-aarch64.tar.xz' -print -quit)"
 mysql_extra="$(find "$factory" -type f -name 'aibox-mysql-extra.tar.gz' -print -quit)"
 libaio_payload="$(find "$factory" -type f -name 'libaio1_*_arm64.deb' -print -quit)"
+libnuma_payload="$(find "$factory" -type f -name 'libnuma1_*_arm64.deb' -print -quit)"
 manifest="$(find "$factory" -maxdepth 2 -type f -name manifest.json -print -quit)"
 [[ -n "$mysql_payload" ]] || { echo 'MySQL 8.0.37 payload missing from program partition' >&2; exit 1; }
 [[ -n "$mysql_extra" ]] || { echo 'MySQL compatibility payload missing from program partition' >&2; exit 1; }
 [[ -n "$libaio_payload" ]] || { echo 'ARM64 libaio payload missing from program partition' >&2; exit 1; }
+[[ -n "$libnuma_payload" ]] || { echo 'ARM64 libnuma payload missing from program partition' >&2; exit 1; }
 [[ -n "$manifest" ]] && grep -Fq '"database_version": "8.0.37"' "$manifest" || { echo 'firmware manifest is not MySQL 8.0.37' >&2; exit 1; }
 
 umount "$root_mount"

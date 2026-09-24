@@ -65,16 +65,28 @@ if [ ! -x "$MYSQL_VERSION_HOME/bin/mysqld" ]; then
     rm -rf -- "$MYSQL_VERSION_HOME"
     mv "$extracted" "$MYSQL_VERSION_HOME"
     rm -rf -- "$extract_dir"
+fi
 
-    install -d -m 0755 "$MYSQL_VERSION_HOME/private-lib"
-    extra_dir="/usr/local/.mysql-extra.$$"
-    rm -rf -- "$extra_dir"
-    install -d -m 0755 "$extra_dir"
-    tar -xzf "$MYSQL_EXTRA" -C "$extra_dir"
-    extra_root="$(find "$extra_dir" -mindepth 1 -maxdepth 1 -type d -name mysql-extra -print -quit)"
-    [ -n "$extra_root" ] || fail 'MySQL compatibility archive has an unexpected layout'
-    cp -a "$extra_root/lib/." "$MYSQL_VERSION_HOME/private-lib/"
-    rm -rf -- "$extra_dir"
+# Always refresh the private compatibility libraries from the embedded payload;
+# The payload includes libaio.so.1 and libnuma.so.1 for the MySQL binary.
+# this also repairs an interrupted first boot without deleting the data tree.
+install -d -m 0755 "$MYSQL_VERSION_HOME/private-lib"
+extra_dir="/usr/local/.mysql-extra.$$"
+rm -rf -- "$extra_dir"
+install -d -m 0755 "$extra_dir"
+tar -xzf "$MYSQL_EXTRA" -C "$extra_dir"
+extra_root="$(find "$extra_dir" -mindepth 1 -maxdepth 1 -type d -name mysql-extra -print -quit)"
+[ -n "$extra_root" ] || fail 'MySQL compatibility archive has an unexpected layout'
+cp -a "$extra_root/lib/." "$MYSQL_VERSION_HOME/private-lib/"
+rm -rf -- "$extra_dir"
+
+# MySQL 8.0.37 also expects the legacy ncurses/tinfo SONAMEs. Noble ships
+# compatible v6 libraries, so expose them through the private search path.
+if command -v ldconfig >/dev/null 2>&1; then
+    ncurses6="$(ldconfig -p 2>/dev/null | awk '$1 == "libncurses.so.6" { print $NF; exit }')"
+    tinfo6="$(ldconfig -p 2>/dev/null | awk '$1 == "libtinfo.so.6" { print $NF; exit }')"
+    [ -z "$ncurses6" ] || ln -sfn "$ncurses6" "$MYSQL_VERSION_HOME/private-lib/libncurses.so.5"
+    [ -z "$tinfo6" ] || ln -sfn "$tinfo6" "$MYSQL_VERSION_HOME/private-lib/libtinfo.so.5"
 fi
 
 [ -x "$MYSQL_VERSION_HOME/bin/mysqld" ] || fail 'MySQL mysqld binary is missing'
@@ -88,7 +100,7 @@ if [ ! -d "$DATA_DIR/mysql" ]; then
     if find "$DATA_DIR" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
         fail "MySQL data directory is non-empty but uninitialized: $DATA_DIR"
     fi
-    "$MYSQL_HOME/bin/mysqld" --defaults-file=/etc/mysql/my.cnf --initialize-insecure --user=mysql
+    LD_LIBRARY_PATH="$MYSQL_VERSION_HOME/private-lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$MYSQL_HOME/bin/mysqld" --defaults-file=/etc/mysql/my.cnf --initialize-insecure --user=mysql
 fi
 
 if [ ! -f "$MARKER" ]; then

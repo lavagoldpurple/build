@@ -5,6 +5,7 @@ After=local-fs.target aibox-storage-init.service aibox-mysql-install.service
 Before=aibox-mysql-bootstrap.service
 
 [Service]
+Environment=LD_LIBRARY_PATH=/usr/local/mysql/private-lib
 Type=simple
 ExecStartPre=/usr/bin/install -d -o mysql -g mysql -m 0755 /run/mysqld
 ExecStart=/usr/local/mysql/bin/mysqld --defaults-file=/etc/mysql/my.cnf --user=mysql

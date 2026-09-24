@@ -4,6 +4,7 @@ Requires=aibox-mysql-install.service mysql.service
 After=aibox-mysql-install.service mysql.service
 
 [Service]
+Environment=LD_LIBRARY_PATH=/usr/local/mysql/private-lib
 Type=oneshot
 ExecStart=/usr/libexec/aibox-mysql-bootstrap
 RemainAfterExit=yes

@@ -72,7 +72,7 @@ function format_partitions__radxa_e20c_storage_layout() {
 	cat <<- EOF >> "${SDCARD}/etc/fstab"
 		UUID=${program_uuid} /opt/aibox ext4 defaults,noatime 0 2
 		UUID=${data_uuid} /userdata ext4 defaults,noatime 0 2
-		LABEL=AIBOX_MEDIA /mnt/aibox-media ext4 nofail,x-systemd.device-timeout=10s 0 2
+		LABEL=AIBOX_MEDIA /mnt/aibox-media ext4 nofail,x-systemd.automount,x-systemd.device-timeout=10s 0 2
 	EOF
 }
 
