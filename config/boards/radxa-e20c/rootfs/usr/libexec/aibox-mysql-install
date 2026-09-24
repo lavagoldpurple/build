@@ -19,8 +19,8 @@ FACTORY_ROOT=/opt/aibox/factory
 
 [ "$(findmnt -n -o FSTYPE /opt/aibox 2>/dev/null || true)" = ext4 ] || fail '/opt/aibox is not ext4'
 [ "$(findmnt -n -o FSTYPE /userdata 2>/dev/null || true)" = ext4 ] || fail '/userdata is not ext4'
-[ "$(findmnt -n -o FSTYPE /mnt/aibox-media 2>/dev/null || true)" = ext4 ] || fail '/mnt/aibox-media is not mounted as ext4'
-media_source="$(readlink -f "$(findmnt -n -o SOURCE /mnt/aibox-media 2>/dev/null || true)" 2>/dev/null || true)"
+media_source="$(findmnt -rn -t ext4 -M /mnt/aibox-media -o SOURCE 2>/dev/null || true)"
+media_source="$(readlink -f "$media_source" 2>/dev/null || true)"
 [ -n "$media_source" ] || fail 'media device is not mounted'
 [ "$(blkid -s LABEL -o value "$media_source" 2>/dev/null || true)" = AIBOX_MEDIA ] || fail 'media label is not AIBOX_MEDIA'
 

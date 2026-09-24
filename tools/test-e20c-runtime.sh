@@ -73,7 +73,10 @@ grep -Fq 'CREATE DATABASE IF NOT EXISTS' "$sql_log"
 grep -Fq "CREATE USER IF NOT EXISTS 'aibox'@'localhost'" "$sql_log"
 grep -Fq "CREATE USER IF NOT EXISTS 'aibox'@'127.0.0.1'" "$sql_log"
 grep -Fq 'GRANT ALL PRIVILEGES ON `aibox`.*' "$sql_log"
-grep -Fq 'media filesystem is not ext4' "$media_script"
+grep -Fq 'AIBOX_MEDIA is not mounted' "$media_script"
 grep -Fq 'media label is not AIBOX_MEDIA' "$media_script"
+grep -Fq 'findmnt -rn -t ext4 -M /mnt/aibox-media' "$media_script"
+grep -Fq 'findmnt -rn -t ext4 -M /mnt/aibox-media' "$install_script"
+grep -Fq 'findmnt -rn -t ext4 -M /mnt/aibox-media' "$app_script"
 
 echo 'PASS E20C MySQL runtime contracts'
