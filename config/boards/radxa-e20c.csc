@@ -11,11 +11,17 @@ KERNEL_TEST_TARGET="vendor"
 FULL_DESKTOP="no"
 BOOT_LOGO="desktop"
 BOOT_FDT_FILE="rockchip/rk3528-radxa-e20c.dtb"
-BOOTSCRIPT="boot-radxa-e20c.cmd:boot.cmd"
-BOOTENV_FILE="radxa-e20c.txt"
 BOOT_SCENARIO="spl-blobs"
 IMAGE_PARTITION_TABLE="gpt"
 PACKAGE_LIST_BOARD="adduser openssl xz-utils cloud-guest-utils gdisk parted"
+
+# rk35xx family configuration assigns its own boot script after board values
+# are read. Override that family default at the documented post-family hook so
+# the final image always contains the E20C DTB fallback script and environment.
+function post_family_config__radxa_e20c_boot_configuration() {
+	declare -g BOOTSCRIPT="boot-radxa-e20c.cmd:boot.cmd"
+	declare -g BOOTENV_FILE="radxa-e20c.txt"
+}
 
 # The RK35xx bootloader occupies offsets above 8 MiB, so the first partition
 # must keep the family default 16 MiB offset.
