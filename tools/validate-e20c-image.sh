@@ -60,6 +60,11 @@ mount -o ro "${loop}p3" "$data_mount"
 grep -Fq ' /opt/aibox ext4 ' "$root_mount/etc/fstab" || { echo 'program fstab entry missing' >&2; exit 1; }
 grep -Fq ' /userdata ext4 ' "$root_mount/etc/fstab" || { echo 'data fstab entry missing' >&2; exit 1; }
 grep -Fq 'LABEL=AIBOX_MEDIA /mnt/aibox-media ext4' "$root_mount/etc/fstab" || { echo 'media fstab entry missing' >&2; exit 1; }
+[[ -s "$root_mount/boot/armbianEnv.txt" ]] || { echo 'armbianEnv.txt is missing or empty' >&2; exit 1; }
+grep -Fq 'fdtfile=rockchip/rk3528-radxa-e20c.dtb' "$root_mount/boot/armbianEnv.txt" || { echo 'E20C fdtfile is missing from armbianEnv.txt' >&2; exit 1; }
+[[ -f "$root_mount/boot/dtb/rockchip/rk3528-radxa-e20c.dtb" ]] || { echo 'E20C DTB is missing from image' >&2; exit 1; }
+[[ -f "$root_mount/boot/boot.cmd" ]] || { echo 'E20C boot.cmd is missing from image' >&2; exit 1; }
+grep -Fq 'setenv fdtfile "rockchip/rk3528-radxa-e20c.dtb"' "$root_mount/boot/boot.cmd" || { echo 'E20C DTB fallback is missing from boot.cmd' >&2; exit 1; }
 [[ -f "$root_mount/etc/mysql/my.cnf" ]] || { echo 'MySQL config missing' >&2; exit 1; }
 grep -Fq 'datadir=/userdata/aibox/database/mysql' "$root_mount/etc/mysql/my.cnf" || { echo 'MySQL datadir mismatch' >&2; exit 1; }
 grep -Fq 'bind-address=127.0.0.1' "$root_mount/etc/mysql/my.cnf" || { echo 'MySQL bind address mismatch' >&2; exit 1; }

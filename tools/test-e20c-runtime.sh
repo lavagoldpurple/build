@@ -13,6 +13,8 @@ serial_getty_dropin="$root_dir/config/boards/radxa-e20c/rootfs/etc/systemd/syste
 getty_dropin="$root_dir/config/boards/radxa-e20c/rootfs/etc/systemd/system/getty@.service.d/10-aibox-library-isolation.conf"
 board_config="$root_dir/config/boards/radxa-e20c.csc"
 workflow="$root_dir/.github/workflows/build-e20c.yml"
+boot_script="$root_dir/config/bootscripts/boot-radxa-e20c.cmd"
+boot_env="$root_dir/config/bootenv/radxa-e20c.txt"
 
 for script in "$bootstrap" "$install_script" "$storage_script" "$media_script" "$app_script"; do
     sh -n "$script"
@@ -21,12 +23,19 @@ done
 [ -f "$mysql_service" ] || { echo 'MySQL service is missing' >&2; exit 1; }
 [ -f "$serial_getty_dropin" ] || { echo 'serial getty library isolation drop-in is missing' >&2; exit 1; }
 [ -f "$getty_dropin" ] || { echo 'getty library isolation drop-in is missing' >&2; exit 1; }
+[ -f "$boot_script" ] || { echo 'E20C boot script is missing' >&2; exit 1; }
+[ -s "$boot_env" ] || { echo 'E20C boot environment is missing or empty' >&2; exit 1; }
 grep -Fq 'PACKAGE_LIST_BOARD="adduser' "$board_config"
 ! grep -Eq 'mariadb|aibox-mariadb' "$board_config"
 grep -Fq 'LABEL=AIBOX_MEDIA /mnt/aibox-media ext4 nofail,' "$board_config"
 ! grep -Fq 'LABEL=AIBOX_MEDIA /mnt/aibox-media ext4 nofail,noauto' "$board_config"
 grep -Fq 'AIBOX_PACKAGE_URL' "$board_config"
 grep -Fq 'AIBOX_PACKAGE_URL' "$workflow"
+grep -Fq 'BOOTSCRIPT="boot-radxa-e20c.cmd:boot.cmd"' "$board_config"
+grep -Fq 'BOOTENV_FILE="radxa-e20c.txt"' "$board_config"
+grep -Fq 'setenv fdtfile "rockchip/rk3528-radxa-e20c.dtb"' "$boot_script"
+grep -Fq 'WARNING: armbianEnv.txt is empty' "$boot_script"
+grep -Fq 'fdtfile=rockchip/rk3528-radxa-e20c.dtb' "$boot_env"
 grep -Eq 'Requires=.*aibox-media-ready\.service' "$app_service"
 grep -Eq 'Requires=.*aibox-mysql-bootstrap\.service' "$app_service"
 grep -Fq 'mysql.service' "$app_script"
