@@ -69,6 +69,14 @@ grep -Fq 'log-error=/userdata/aibox/logs/mysql/error.log' "$root_mount/etc/mysql
 [[ -f "$root_mount/lib/systemd/system/aibox-mysql-install.service" ]] || { echo 'MySQL install service missing' >&2; exit 1; }
 [[ -f "$root_mount/lib/systemd/system/aibox-mysql-bootstrap.service" ]] || { echo 'MySQL bootstrap service missing' >&2; exit 1; }
 [[ -f "$root_mount/lib/systemd/system/mysql.service" ]] || { echo 'MySQL service missing' >&2; exit 1; }
+serial_getty_dropin="$root_mount/etc/systemd/system/serial-getty@.service.d/10-aibox-library-isolation.conf"
+getty_dropin="$root_mount/etc/systemd/system/getty@.service.d/10-aibox-library-isolation.conf"
+[[ -f "$serial_getty_dropin" ]] || { echo 'serial getty library isolation drop-in missing' >&2; exit 1; }
+[[ -f "$getty_dropin" ]] || { echo 'getty library isolation drop-in missing' >&2; exit 1; }
+grep -Fq 'Environment=LD_LIBRARY_PATH=' "$serial_getty_dropin" || { echo 'serial getty LD_LIBRARY_PATH is not cleared' >&2; exit 1; }
+grep -Fq 'Environment=LD_PRELOAD=' "$serial_getty_dropin" || { echo 'serial getty LD_PRELOAD is not cleared' >&2; exit 1; }
+grep -Fq 'Environment=LD_LIBRARY_PATH=' "$getty_dropin" || { echo 'getty LD_LIBRARY_PATH is not cleared' >&2; exit 1; }
+grep -Fq 'Environment=LD_PRELOAD=' "$getty_dropin" || { echo 'getty LD_PRELOAD is not cleared' >&2; exit 1; }
 factory="$program_mount/factory"
 [[ -d "$factory" ]] || { echo "AIBox factory package missing from program partition: $factory" >&2; exit 1; }
 mysql_payload="$(find "$factory" -type f -name 'mysql-8.0.37-linux-glibc2.17-aarch64.tar.xz' -print -quit)"

@@ -85,8 +85,15 @@ rm -rf -- "$extra_dir"
 if command -v ldconfig >/dev/null 2>&1; then
     ncurses6="$(ldconfig -p 2>/dev/null | awk '$1 == "libncurses.so.6" { print $NF; exit }')"
     tinfo6="$(ldconfig -p 2>/dev/null | awk '$1 == "libtinfo.so.6" { print $NF; exit }')"
-    [ -z "$ncurses6" ] || ln -sfn "$ncurses6" "$MYSQL_VERSION_HOME/private-lib/libncurses.so.5"
-    [ -z "$tinfo6" ] || ln -sfn "$tinfo6" "$MYSQL_VERSION_HOME/private-lib/libtinfo.so.5"
+    # Prefer the verified ABI-5 files from aibox-mysql-extra.tar.gz. Only
+    # fall back to Noble's ABI-6 libraries when a payload file is absent;
+    # never replace a verified private library with a system symlink.
+    if [ ! -e "$MYSQL_VERSION_HOME/private-lib/libncurses.so.5" ] && [ -n "$ncurses6" ]; then
+        ln -s "$ncurses6" "$MYSQL_VERSION_HOME/private-lib/libncurses.so.5"
+    fi
+    if [ ! -e "$MYSQL_VERSION_HOME/private-lib/libtinfo.so.5" ] && [ -n "$tinfo6" ]; then
+        ln -s "$tinfo6" "$MYSQL_VERSION_HOME/private-lib/libtinfo.so.5"
+    fi
 fi
 
 [ -x "$MYSQL_VERSION_HOME/bin/mysqld" ] || fail 'MySQL mysqld binary is missing'

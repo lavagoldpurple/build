@@ -9,6 +9,8 @@ media_script="$root_dir/config/boards/radxa-e20c/rootfs/usr/libexec/aibox-media-
 app_script="$root_dir/config/boards/radxa-e20c/rootfs/usr/libexec/aibox-app-init"
 app_service="$root_dir/config/boards/radxa-e20c/rootfs/lib/systemd/system/aibox-app-init.service"
 mysql_service="$root_dir/config/boards/radxa-e20c/rootfs/lib/systemd/system/mysql.service"
+serial_getty_dropin="$root_dir/config/boards/radxa-e20c/rootfs/etc/systemd/system/serial-getty@.service.d/10-aibox-library-isolation.conf"
+getty_dropin="$root_dir/config/boards/radxa-e20c/rootfs/etc/systemd/system/getty@.service.d/10-aibox-library-isolation.conf"
 board_config="$root_dir/config/boards/radxa-e20c.csc"
 workflow="$root_dir/.github/workflows/build-e20c.yml"
 
@@ -17,6 +19,8 @@ for script in "$bootstrap" "$install_script" "$storage_script" "$media_script" "
 done
 [ -f "$app_service" ] || { echo 'AIBox app service is missing' >&2; exit 1; }
 [ -f "$mysql_service" ] || { echo 'MySQL service is missing' >&2; exit 1; }
+[ -f "$serial_getty_dropin" ] || { echo 'serial getty library isolation drop-in is missing' >&2; exit 1; }
+[ -f "$getty_dropin" ] || { echo 'getty library isolation drop-in is missing' >&2; exit 1; }
 grep -Fq 'PACKAGE_LIST_BOARD="adduser' "$board_config"
 ! grep -Eq 'mariadb|aibox-mariadb' "$board_config"
 grep -Fq 'LABEL=AIBOX_MEDIA /mnt/aibox-media ext4 nofail,' "$board_config"
@@ -30,7 +34,13 @@ grep -Fq 'mysql-runtime.env' "$app_script"
 grep -Fq '8.0.37' "$install_script"
 grep -Fq 'libnuma.so.1' "$install_script"
 grep -Fq 'LD_LIBRARY_PATH=' "$install_script"
+grep -Fq 'Prefer the verified ABI-5 files' "$install_script"
+grep -Fq '[ ! -e "$MYSQL_VERSION_HOME/private-lib/libtinfo.so.5" ]' "$install_script"
 grep -Fq 'Environment=LD_LIBRARY_PATH=/usr/local/mysql/private-lib' "$mysql_service"
+grep -Fq 'Environment=LD_LIBRARY_PATH=' "$serial_getty_dropin"
+grep -Fq 'Environment=LD_PRELOAD=' "$serial_getty_dropin"
+grep -Fq 'Environment=LD_LIBRARY_PATH=' "$getty_dropin"
+grep -Fq 'Environment=LD_PRELOAD=' "$getty_dropin"
 grep -Fq 'MARKER=/userdata/.aibox-mysql-${MYSQL_VERSION}-initialized' "$install_script"
 grep -Fq 'rm -rf -- /userdata/aibox' "$install_script"
 grep -Fq '/mnt/aibox-media' "$install_script"
