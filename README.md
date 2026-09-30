@@ -49,10 +49,15 @@ and an `AIBOX_DATA` partition mounted at `/userdata`.
 
 The data partition is expanded to the end of the physical eMMC on first boot.
 MySQL 8.0.37 is installed from the embedded ARM64 generic binary and runs as
-`mysql.service` with binaries under `/usr/local/mysql`. Database files and logs
-are stored below `/userdata/aibox`, and the first boot creates the local-only
-`aibox` database and account. Credentials are generated on-device in
-`/userdata/aibox/secure/mysql-runtime.env` with mode `0600`.
+`mysql.service` with binaries under `/usr/local/mysql` (a compatibility symlink
+to `/opt/aibox/mysql-8.0.37`). Database files and logs are stored below
+`/userdata/aibox`, and the first boot creates the local-only `aibox` database
+and account. Random root and application credentials are generated on-device
+in `/userdata/aibox/secure/mysql-runtime.env` with mode `0600`; the AIBox
+application only consumes `MYSQL_APP_PASSWORD`. MySQL uses its built-in
+`mysql_native_password` plugin and does not use the MariaDB-only `auth_socket`
+plugin. Back up `/userdata/aibox` before a full image rewrite; this fix does
+not migrate or delete existing business database data.
 On the first MySQL firmware boot, the existing `/userdata/aibox` tree is
 recreated once; the marker `/userdata/.aibox-mysql-8.0.37-initialized` prevents
 repeat cleanup. The TF media filesystem is outside this cleanup boundary.

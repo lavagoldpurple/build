@@ -59,6 +59,10 @@ grep -Fq 'ExecStartPre=/usr/bin/rm -f /run/mysqld/mysqld.sock' "$mysql_service"
 grep -Fq 'MYSQL_LIB_DIR=' "$bootstrap"
 grep -Fq 'run_mysql()' "$bootstrap"
 grep -Fq 'run_mysqladmin()' "$bootstrap"
+grep -Fq 'MYSQL_ROOT_PASSWORD' "$bootstrap"
+grep -Fq 'MYSQL_PWD=' "$bootstrap"
+grep -Fq 'mysql_native_password' "$bootstrap"
+! grep -R -n -E 'auth[_]socket' "$root_dir/config" "$root_dir/tools" >/dev/null
 grep -Fq 'LD_LIBRARY_PATH="$MYSQL_HOME/private-lib' "$mysql_wrapper"
 grep -Fq 'LD_LIBRARY_PATH="$MYSQL_HOME/private-lib' "$mysqladmin_wrapper"
 grep -Fq 'Environment=LD_LIBRARY_PATH=' "$serial_getty_dropin"
@@ -70,6 +74,7 @@ grep -Fq 'rm -rf -- /userdata/aibox' "$install_script"
 grep -Fq '/mnt/aibox-media' "$install_script"
 grep -Fq 'bind-address=127.0.0.1' "$root_dir/config/boards/radxa-e20c/rootfs/etc/mysql/my.cnf"
 grep -Fq 'ExecStart=/usr/local/mysql/bin/mysqld' "$mysql_service"
+! grep -Fq 'ExecStop=' "$mysql_service"
 
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
@@ -78,7 +83,16 @@ secure_dir="$temp_dir/secure"
 mkdir -p "$bin_dir" "$secure_dir"
 cat > "$bin_dir/fake-mysql" <<'EOF'
 #!/bin/sh
-cat >> "${AIBOX_MYSQL_SQL_LOG:?}"
+if [ -n "${MYSQL_PWD:-}" ] && [ ! -f "${AIBOX_MYSQL_FIRST_RUN_MARKER:?}" ]; then
+    exit 1
+fi
+sql="$(cat)"
+printf '%s\n' "$sql" >> "${AIBOX_MYSQL_SQL_LOG:?}"
+case "$sql" in
+    *"ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password"*)
+        : > "$AIBOX_MYSQL_FIRST_RUN_MARKER"
+        ;;
+esac
 exit 0
 EOF
 cat > "$bin_dir/fake-mysqladmin" <<'EOF'
@@ -93,20 +107,36 @@ PATH="$bin_dir:$PATH" \
     AIBOX_MYSQL_ADMIN="$bin_dir/fake-mysqladmin" \
     AIBOX_MYSQL_SECURE_DIR="$secure_dir" \
     AIBOX_MYSQL_SQL_LOG="$sql_log" \
+    AIBOX_MYSQL_FIRST_RUN_MARKER="$temp_dir/root-password-set" \
     sh "$bootstrap" >/dev/null
 
 runtime_env="$secure_dir/mysql-runtime.env"
 [[ -f "$runtime_env" ]] || { echo 'MySQL runtime credentials were not generated' >&2; exit 1; }
 password="$(sed -n 's/^MYSQL_APP_PASSWORD=//p' "$runtime_env")"
+root_password="$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$runtime_env")"
 [[ "${#password}" == 64 ]] || { echo 'generated password is not 64 hex characters' >&2; exit 1; }
 [[ "$password" =~ ^[0-9A-Fa-f]+$ ]] || { echo 'generated password is not hexadecimal' >&2; exit 1; }
+[[ "${#root_password}" == 64 ]] || { echo 'generated root password is not 64 hex characters' >&2; exit 1; }
+[[ "$root_password" =~ ^[0-9A-Fa-f]+$ ]] || { echo 'generated root password is not hexadecimal' >&2; exit 1; }
 if [[ "$(uname -s)" != MINGW* && "$(uname -s)" != MSYS* ]]; then
     [[ "$(stat -c '%a' "$runtime_env")" == 600 ]] || { echo 'runtime credentials are not mode 0600' >&2; exit 1; }
 fi
 grep -Fq 'CREATE DATABASE IF NOT EXISTS' "$sql_log"
+grep -Fq "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password" "$sql_log"
+grep -Fq 'mysql_native_password' "$sql_log"
 grep -Fq "CREATE USER IF NOT EXISTS 'aibox'@'localhost'" "$sql_log"
 grep -Fq "CREATE USER IF NOT EXISTS 'aibox'@'127.0.0.1'" "$sql_log"
 grep -Fq 'GRANT ALL PRIVILEGES ON `aibox`.*' "$sql_log"
+
+PATH="$bin_dir:$PATH" \
+    AIBOX_MYSQL_CLIENT="$bin_dir/fake-mysql" \
+    AIBOX_MYSQL_ADMIN="$bin_dir/fake-mysqladmin" \
+    AIBOX_MYSQL_SECURE_DIR="$secure_dir" \
+    AIBOX_MYSQL_SQL_LOG="$sql_log" \
+    AIBOX_MYSQL_FIRST_RUN_MARKER="$temp_dir/root-password-set" \
+    sh "$bootstrap" >/dev/null
+second_root_password="$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$runtime_env")"
+[[ "$second_root_password" == "$root_password" ]] || { echo 'root password changed on repeat bootstrap' >&2; exit 1; }
 grep -Fq 'AIBOX_MEDIA is not mounted' "$media_script"
 grep -Fq 'media label is not AIBOX_MEDIA' "$media_script"
 grep -Fq 'findmnt -rn -t ext4 -M /mnt/aibox-media' "$media_script"

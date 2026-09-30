@@ -75,6 +75,8 @@ grep -Fq 'log-error=/userdata/aibox/logs/mysql/error.log' "$root_mount/etc/mysql
 [[ -f "$root_mount/lib/systemd/system/aibox-mysql-bootstrap.service" ]] || { echo 'MySQL bootstrap service missing' >&2; exit 1; }
 [[ -f "$root_mount/lib/systemd/system/mysql.service" ]] || { echo 'MySQL service missing' >&2; exit 1; }
 grep -Fq 'MYSQL_VERSION_HOME=/opt/aibox/mysql-${MYSQL_VERSION}' "$root_mount/usr/libexec/aibox-mysql-install" || { echo 'MySQL version directory is not on /opt/aibox' >&2; exit 1; }
+! grep -Eq 'auth[_]socket' "$root_mount/usr/libexec/aibox-mysql-bootstrap" || { echo 'unsupported socket authentication remains in MySQL bootstrap' >&2; exit 1; }
+grep -Fq 'mysql_native_password' "$root_mount/usr/libexec/aibox-mysql-bootstrap" || { echo 'MySQL native password authentication is missing' >&2; exit 1; }
 grep -Fq 'ExecStartPre=/usr/bin/chown mysql:mysql /run/mysqld' "$root_mount/lib/systemd/system/mysql.service" || { echo 'MySQL runtime directory ownership fix is missing' >&2; exit 1; }
 ! grep -Fq 'RuntimeDirectory=' "$root_mount/lib/systemd/system/mysql.service" || { echo 'mysql.service still delegates /run/mysqld ownership to RuntimeDirectory' >&2; exit 1; }
 [[ -x "$root_mount/usr/local/bin/mysql" ]] || { echo 'MySQL client wrapper missing' >&2; exit 1; }

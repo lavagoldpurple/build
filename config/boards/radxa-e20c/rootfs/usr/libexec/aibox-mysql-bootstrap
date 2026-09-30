@@ -17,6 +17,39 @@ run_mysqladmin() {
     LD_LIBRARY_PATH="$MYSQL_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$MYSQLADMIN" "$@"
 }
 
+run_root_mysql() {
+    if [ "${ROOT_AUTH_MODE:-password}" = password ]; then
+        MYSQL_PWD="$MYSQL_ROOT_PASSWORD" run_mysql "$@"
+    else
+        MYSQL_PWD= run_mysql "$@"
+    fi
+}
+
+run_root_mysqladmin() {
+    if [ "${ROOT_AUTH_MODE:-password}" = password ]; then
+        MYSQL_PWD="$MYSQL_ROOT_PASSWORD" run_mysqladmin "$@"
+    else
+        MYSQL_PWD= run_mysqladmin "$@"
+    fi
+}
+
+random_password() {
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+write_runtime_env() {
+    runtime_tmp="$RUNTIME_ENV.tmp.$$"
+    cat > "$runtime_tmp" <<EOF
+MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
+MYSQL_APP_DATABASE=aibox
+MYSQL_APP_USER=aibox
+MYSQL_APP_PASSWORD=$MYSQL_APP_PASSWORD
+EOF
+    chmod 0600 "$runtime_tmp"
+    mv -f "$runtime_tmp" "$RUNTIME_ENV"
+    chmod 0600 "$RUNTIME_ENV"
+}
+
 command -v "$MYSQL" >/dev/null 2>&1 || fail 'mysql client is missing'
 command -v "$MYSQLADMIN" >/dev/null 2>&1 || fail 'mysqladmin is missing'
 mkdir -p "$SECURE_DIR"
@@ -26,38 +59,51 @@ umask 077
 if [ -f "$RUNTIME_ENV" ]; then
     . "$RUNTIME_ENV"
 fi
+MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
 MYSQL_APP_PASSWORD="${MYSQL_APP_PASSWORD:-}"
 case "$MYSQL_APP_PASSWORD" in
-    '') MYSQL_APP_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" ;;
+    '') MYSQL_APP_PASSWORD="$(random_password)" ;;
     *[!0-9A-Fa-f]*) fail 'application password must be hexadecimal' ;;
 esac
 [ "${#MYSQL_APP_PASSWORD}" = 64 ] || fail 'application password must be 64 hex characters'
-cat > "$RUNTIME_ENV.tmp.$$" <<EOF
-MYSQL_APP_DATABASE=aibox
-MYSQL_APP_USER=aibox
-MYSQL_APP_PASSWORD=$MYSQL_APP_PASSWORD
-EOF
-chmod 0600 "$RUNTIME_ENV.tmp.$$"
-mv -f "$RUNTIME_ENV.tmp.$$" "$RUNTIME_ENV"
+case "$MYSQL_ROOT_PASSWORD" in
+    '') MYSQL_ROOT_PASSWORD="$(random_password)" ;;
+    *[!0-9A-Fa-f]*) fail 'root password must be hexadecimal' ;;
+esac
+[ "${#MYSQL_ROOT_PASSWORD}" = 64 ] || fail 'root password must be 64 hex characters'
+
+# Persist credentials before changing root authentication so an interrupted
+# first boot can retry with the same password or fall back to no-password root.
+write_runtime_env
 
 i=0
-until run_mysql --protocol=socket --socket="$SOCKET" -uroot -e 'SELECT 1' >/dev/null 2>&1; do
+ROOT_AUTH_MODE=password
+while :; do
+    if MYSQL_PWD="$MYSQL_ROOT_PASSWORD" run_mysql --protocol=socket --socket="$SOCKET" -uroot -e 'SELECT 1' >/dev/null 2>&1; then
+        ROOT_AUTH_MODE=password
+        break
+    fi
+    if MYSQL_PWD= run_mysql --protocol=socket --socket="$SOCKET" -uroot -e 'SELECT 1' >/dev/null 2>&1; then
+        ROOT_AUTH_MODE=empty
+        break
+    fi
     i=$((i + 1))
-    [ "$i" -le 120 ] || fail 'MySQL did not become ready'
+    [ "$i" -le 120 ] || fail 'MySQL did not become ready or root credentials are invalid'
     sleep 1
 done
 
-run_mysql --protocol=socket --socket="$SOCKET" -uroot <<SQL
-ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;
+run_root_mysql --protocol=socket --socket="$SOCKET" -uroot <<SQL
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASSWORD}';
 CREATE DATABASE IF NOT EXISTS \`aibox\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-CREATE USER IF NOT EXISTS 'aibox'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
-ALTER USER 'aibox'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
-CREATE USER IF NOT EXISTS 'aibox'@'127.0.0.1' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
-ALTER USER 'aibox'@'127.0.0.1' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
+CREATE USER IF NOT EXISTS 'aibox'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_APP_PASSWORD}';
+ALTER USER 'aibox'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_APP_PASSWORD}';
+CREATE USER IF NOT EXISTS 'aibox'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${MYSQL_APP_PASSWORD}';
+ALTER USER 'aibox'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${MYSQL_APP_PASSWORD}';
 GRANT ALL PRIVILEGES ON \`aibox\`.* TO 'aibox'@'localhost';
 GRANT ALL PRIVILEGES ON \`aibox\`.* TO 'aibox'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
-run_mysqladmin --protocol=socket --socket="$SOCKET" -uroot ping >/dev/null
+ROOT_AUTH_MODE=password
+run_root_mysqladmin --protocol=socket --socket="$SOCKET" -uroot ping >/dev/null
 echo 'AIBox MySQL bootstrap: local database and account are ready.'
