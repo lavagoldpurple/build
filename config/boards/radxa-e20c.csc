@@ -120,6 +120,7 @@ function post_family_tweaks_bsp__install_radxa_e20c_runtime() {
 	display_alert "Installing E20C storage and MySQL 8.0.37 runtime" "$BOARD"
 	cp -a "${SRC}/config/boards/radxa-e20c/rootfs/." "${destination}/"
 	chmod 0755 "${destination}/usr/libexec/aibox-"*
+	chmod 0755 "${destination}/usr/local/bin/mysql" "${destination}/usr/local/bin/mysqladmin"
 
 	local wants_dir="${destination}/etc/systemd/system/multi-user.target.wants"
 	mkdir -p "${wants_dir}"

@@ -5,8 +5,17 @@ fail() { echo "AIBox MySQL bootstrap: $*" >&2; exit 1; }
 MYSQL="${AIBOX_MYSQL_CLIENT:-/usr/local/mysql/bin/mysql}"
 MYSQLADMIN="${AIBOX_MYSQL_ADMIN:-/usr/local/mysql/bin/mysqladmin}"
 SOCKET="${AIBOX_MYSQL_SOCKET:-/run/mysqld/mysqld.sock}"
+MYSQL_LIB_DIR="${AIBOX_MYSQL_LIB_DIR:-/usr/local/mysql/private-lib}"
 SECURE_DIR="${AIBOX_MYSQL_SECURE_DIR:-/userdata/aibox/secure}"
 RUNTIME_ENV="$SECURE_DIR/mysql-runtime.env"
+
+run_mysql() {
+    LD_LIBRARY_PATH="$MYSQL_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$MYSQL" "$@"
+}
+
+run_mysqladmin() {
+    LD_LIBRARY_PATH="$MYSQL_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "$MYSQLADMIN" "$@"
+}
 
 command -v "$MYSQL" >/dev/null 2>&1 || fail 'mysql client is missing'
 command -v "$MYSQLADMIN" >/dev/null 2>&1 || fail 'mysqladmin is missing'
@@ -32,13 +41,13 @@ chmod 0600 "$RUNTIME_ENV.tmp.$$"
 mv -f "$RUNTIME_ENV.tmp.$$" "$RUNTIME_ENV"
 
 i=0
-until "$MYSQL" --protocol=socket --socket="$SOCKET" -uroot -e 'SELECT 1' >/dev/null 2>&1; do
+until run_mysql --protocol=socket --socket="$SOCKET" -uroot -e 'SELECT 1' >/dev/null 2>&1; do
     i=$((i + 1))
     [ "$i" -le 120 ] || fail 'MySQL did not become ready'
     sleep 1
 done
 
-"$MYSQL" --protocol=socket --socket="$SOCKET" -uroot <<SQL
+run_mysql --protocol=socket --socket="$SOCKET" -uroot <<SQL
 ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;
 CREATE DATABASE IF NOT EXISTS \`aibox\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 CREATE USER IF NOT EXISTS 'aibox'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_APP_PASSWORD}';
@@ -50,5 +59,5 @@ GRANT ALL PRIVILEGES ON \`aibox\`.* TO 'aibox'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
-"$MYSQLADMIN" --protocol=socket --socket="$SOCKET" -uroot ping >/dev/null
+run_mysqladmin --protocol=socket --socket="$SOCKET" -uroot ping >/dev/null
 echo 'AIBox MySQL bootstrap: local database and account are ready.'

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+MYSQL_HOME=/usr/local/mysql
+export LD_LIBRARY_PATH="$MYSQL_HOME/private-lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$MYSQL_HOME/bin/mysqladmin" "$@"

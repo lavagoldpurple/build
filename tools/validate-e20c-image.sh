@@ -74,6 +74,10 @@ grep -Fq 'log-error=/userdata/aibox/logs/mysql/error.log' "$root_mount/etc/mysql
 [[ -f "$root_mount/lib/systemd/system/aibox-mysql-install.service" ]] || { echo 'MySQL install service missing' >&2; exit 1; }
 [[ -f "$root_mount/lib/systemd/system/aibox-mysql-bootstrap.service" ]] || { echo 'MySQL bootstrap service missing' >&2; exit 1; }
 [[ -f "$root_mount/lib/systemd/system/mysql.service" ]] || { echo 'MySQL service missing' >&2; exit 1; }
+grep -Fq 'ExecStartPre=/usr/bin/chown mysql:mysql /run/mysqld' "$root_mount/lib/systemd/system/mysql.service" || { echo 'MySQL runtime directory ownership fix is missing' >&2; exit 1; }
+! grep -Fq 'RuntimeDirectory=' "$root_mount/lib/systemd/system/mysql.service" || { echo 'mysql.service still delegates /run/mysqld ownership to RuntimeDirectory' >&2; exit 1; }
+[[ -x "$root_mount/usr/local/bin/mysql" ]] || { echo 'MySQL client wrapper missing' >&2; exit 1; }
+[[ -x "$root_mount/usr/local/bin/mysqladmin" ]] || { echo 'mysqladmin wrapper missing' >&2; exit 1; }
 serial_getty_dropin="$root_mount/etc/systemd/system/serial-getty@.service.d/10-aibox-library-isolation.conf"
 getty_dropin="$root_mount/etc/systemd/system/getty@.service.d/10-aibox-library-isolation.conf"
 [[ -f "$serial_getty_dropin" ]] || { echo 'serial getty library isolation drop-in missing' >&2; exit 1; }

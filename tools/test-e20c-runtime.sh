@@ -9,6 +9,8 @@ media_script="$root_dir/config/boards/radxa-e20c/rootfs/usr/libexec/aibox-media-
 app_script="$root_dir/config/boards/radxa-e20c/rootfs/usr/libexec/aibox-app-init"
 app_service="$root_dir/config/boards/radxa-e20c/rootfs/lib/systemd/system/aibox-app-init.service"
 mysql_service="$root_dir/config/boards/radxa-e20c/rootfs/lib/systemd/system/mysql.service"
+mysql_wrapper="$root_dir/config/boards/radxa-e20c/rootfs/usr/local/bin/mysql"
+mysqladmin_wrapper="$root_dir/config/boards/radxa-e20c/rootfs/usr/local/bin/mysqladmin"
 serial_getty_dropin="$root_dir/config/boards/radxa-e20c/rootfs/etc/systemd/system/serial-getty@.service.d/10-aibox-library-isolation.conf"
 getty_dropin="$root_dir/config/boards/radxa-e20c/rootfs/etc/systemd/system/getty@.service.d/10-aibox-library-isolation.conf"
 board_config="$root_dir/config/boards/radxa-e20c.csc"
@@ -16,7 +18,7 @@ workflow="$root_dir/.github/workflows/build-e20c.yml"
 boot_script="$root_dir/config/bootscripts/boot-radxa-e20c.cmd"
 boot_env="$root_dir/config/bootenv/radxa-e20c.txt"
 
-for script in "$bootstrap" "$install_script" "$storage_script" "$media_script" "$app_script"; do
+for script in "$bootstrap" "$install_script" "$storage_script" "$media_script" "$app_script" "$mysql_wrapper" "$mysqladmin_wrapper"; do
     sh -n "$script"
 done
 [ -f "$app_service" ] || { echo 'AIBox app service is missing' >&2; exit 1; }
@@ -46,6 +48,15 @@ grep -Fq 'LD_LIBRARY_PATH=' "$install_script"
 grep -Fq 'Prefer the verified ABI-5 files' "$install_script"
 grep -Fq '[ ! -e "$MYSQL_VERSION_HOME/private-lib/libtinfo.so.5" ]' "$install_script"
 grep -Fq 'Environment=LD_LIBRARY_PATH=/usr/local/mysql/private-lib' "$mysql_service"
+grep -Fq 'chmod 0755 "${destination}/usr/local/bin/mysql"' "$board_config"
+grep -Fq 'ExecStartPre=/usr/bin/chown mysql:mysql /run/mysqld' "$mysql_service"
+grep -Fq 'ExecStartPre=/usr/bin/rm -f /run/mysqld/mysqld.sock' "$mysql_service"
+! grep -Fq 'RuntimeDirectory=' "$mysql_service"
+grep -Fq 'MYSQL_LIB_DIR=' "$bootstrap"
+grep -Fq 'run_mysql()' "$bootstrap"
+grep -Fq 'run_mysqladmin()' "$bootstrap"
+grep -Fq 'LD_LIBRARY_PATH="$MYSQL_HOME/private-lib' "$mysql_wrapper"
+grep -Fq 'LD_LIBRARY_PATH="$MYSQL_HOME/private-lib' "$mysqladmin_wrapper"
 grep -Fq 'Environment=LD_LIBRARY_PATH=' "$serial_getty_dropin"
 grep -Fq 'Environment=LD_PRELOAD=' "$serial_getty_dropin"
 grep -Fq 'Environment=LD_LIBRARY_PATH=' "$getty_dropin"
